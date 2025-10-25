@@ -77,6 +77,15 @@ resource "aws_security_group" "minecraft_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Minecraft Bedrock Edition port (for GeyserMC)
+  ingress {
+    description = "Minecraft Bedrock Edition"
+    from_port   = 19132
+    to_port     = 19132
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # SSH access (restricted to your IP if specified)
   ingress {
     description = "SSH access"
@@ -213,25 +222,54 @@ resource "aws_iam_instance_profile" "minecraft_instance_profile" {
   role = aws_iam_role.minecraft_ec2_role.name
 }
 
-# Get latest Amazon Linux 2023 AMI
+# Get latest Amazon Linux 2023 AMI for ARM64 (Graviton)
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = ["al2023-ami-*-x86_64"]
+    values = ["al2023-ami-*-arm64"]
   }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+
+  filter {
+    name   = "architecture"
+    values = ["arm64"]
+  }
 }
 
 # Get available AZs
 data "aws_availability_zones" "available" {
   state = "available"
+}
+
+# Generate SSH key pair
+resource "tls_private_key" "minecraft_ssh_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+# Create AWS key pair
+resource "aws_key_pair" "minecraft_key" {
+  key_name   = "${var.project_name}-key"
+  public_key = tls_private_key.minecraft_ssh_key.public_key_openssh
+
+  tags = {
+    Name        = "${var.project_name}-key"
+    Environment = var.environment
+  }
+}
+
+# Save private key to local file
+resource "local_file" "private_key" {
+  content         = tls_private_key.minecraft_ssh_key.private_key_pem
+  filename        = "${path.module}/${var.project_name}-key.pem"
+  file_permission = "0600"
 }
 
 # Security Group for VPC Endpoints
@@ -347,7 +385,7 @@ resource "aws_ebs_volume" "minecraft_data" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -358,6 +396,7 @@ resource "aws_instance" "minecraft_server" {
   subnet_id              = aws_subnet.minecraft_public_subnet.id
   vpc_security_group_ids = [aws_security_group.minecraft_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.minecraft_instance_profile.name
+  key_name               = aws_key_pair.minecraft_key.key_name
   user_data              = local.user_data
   user_data_replace_on_change = true
 
@@ -452,7 +491,7 @@ resource "aws_lb_target_group_attachment" "minecraft_tg_attachment" {
   port             = 25565
 }
 
-# NLB Listener
+# NLB Listener for Java Edition
 resource "aws_lb_listener" "minecraft_listener" {
   load_balancer_arn = aws_lb.minecraft_nlb.arn
   port              = 25565
@@ -464,21 +503,65 @@ resource "aws_lb_listener" "minecraft_listener" {
   }
 }
 
+# NLB Target Group for Bedrock Edition
+resource "aws_lb_target_group" "minecraft_bedrock_tg" {
+  name     = "${var.project_name}-bedrock-tg"
+  port     = 19132
+  protocol = "UDP"
+  vpc_id   = aws_vpc.minecraft_vpc.id
+
+  health_check {
+    enabled             = true
+    protocol            = "TCP"
+    port                = 25565
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    interval            = 30
+  }
+
+  tags = {
+    Name        = "${var.project_name}-bedrock-tg"
+    Environment = var.environment
+  }
+}
+
+# Register instance with Bedrock target group
+resource "aws_lb_target_group_attachment" "minecraft_bedrock_tg_attachment" {
+  target_group_arn = aws_lb_target_group.minecraft_bedrock_tg.arn
+  target_id        = aws_instance.minecraft_server.id
+  port             = 19132
+}
+
+# NLB Listener for Bedrock Edition
+resource "aws_lb_listener" "minecraft_bedrock_listener" {
+  load_balancer_arn = aws_lb.minecraft_nlb.arn
+  port              = 19132
+  protocol          = "UDP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.minecraft_bedrock_tg.arn
+  }
+}
+
 # Route53 Hosted Zone (data source - assumes zone already exists)
 data "aws_route53_zone" "main" {
   count = var.domain_name != "" ? 1 : 0
   name  = var.domain_name
 }
 
-# Route53 Record for subdomain pointing to EIP
-resource "aws_route53_record" "minecraft_subdomain" {
-  count   = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
+# Route53 Record for Minecraft server (separate from API)
+resource "aws_route53_record" "minecraft_server" {
+  count   = var.domain_name != "" && var.game_subdomain_name != "" ? 1 : 0
   zone_id = data.aws_route53_zone.main[0].zone_id
-  name    = "${var.subdomain_name}.${var.domain_name}"
+  name    = "${var.game_subdomain_name}.${var.domain_name}"
   type    = "A"
   ttl     = 300
   records = [aws_eip.minecraft_eip.public_ip]
 }
+
+# Note: The subdomain (e.g., mc.cooperisland7.com) is used for API Gateway control endpoints
+# Minecraft game traffic uses game_subdomain (e.g., play.cooperisland7.com) which points directly to the EIP
 
 # DLM (Data Lifecycle Manager) for automated EBS snapshots
 resource "aws_iam_role" "dlm_lifecycle_role" {
@@ -561,5 +644,354 @@ resource "aws_dlm_lifecycle_policy" "minecraft_backup" {
     target_tags = {
       Backup = "true"
     }
+  }
+}
+
+# SNS Topic for notifications
+resource "aws_sns_topic" "server_notifications" {
+  count = var.notification_email != "" ? 1 : 0
+  name  = "${var.project_name}-notifications"
+
+  tags = {
+    Name        = "${var.project_name}-notifications"
+    Environment = var.environment
+  }
+}
+
+# SNS Topic Subscription
+resource "aws_sns_topic_subscription" "email_subscription" {
+  count     = var.notification_email != "" ? 1 : 0
+  topic_arn = aws_sns_topic.server_notifications[0].arn
+  protocol  = "email"
+  endpoint  = var.notification_email
+}
+
+# IAM Role for Lambda function
+resource "aws_iam_role" "lambda_control_role" {
+  name = "${var.project_name}-lambda-control-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.project_name}-lambda-control-role"
+    Environment = var.environment
+  }
+}
+
+# IAM Policy for Lambda to control EC2 instance
+resource "aws_iam_role_policy" "lambda_control_policy" {
+  name = "${var.project_name}-lambda-control-policy"
+  role = aws_iam_role.lambda_control_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:StartInstances",
+          "ec2:StopInstances",
+          "ec2:RebootInstances",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sns:Publish"
+        ]
+        Resource = var.notification_email != "" ? aws_sns_topic.server_notifications[0].arn : "*"
+      }
+    ]
+  })
+}
+
+# Lambda function for start/stop control
+resource "aws_lambda_function" "instance_control" {
+  filename      = data.archive_file.lambda_zip.output_path
+  function_name = "${var.project_name}-control"
+  role          = aws_iam_role.lambda_control_role.arn
+  handler       = "index.handler"
+  runtime       = "python3.11"
+  timeout       = 30
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      INSTANCE_ID = aws_instance.minecraft_server.id
+      SNS_TOPIC_ARN = var.notification_email != "" ? aws_sns_topic.server_notifications[0].arn : ""
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-control"
+    Environment = var.environment
+  }
+}
+
+# Lambda function code
+resource "local_file" "lambda_code" {
+  content  = <<-EOF
+import json
+import boto3
+import os
+
+ec2 = boto3.client('ec2')
+sns = boto3.client('sns')
+instance_id = os.environ['INSTANCE_ID']
+sns_topic_arn = os.environ.get('SNS_TOPIC_ARN', '')
+
+def send_notification(subject, message):
+    if sns_topic_arn:
+        try:
+            sns.publish(
+                TopicArn=sns_topic_arn,
+                Subject=subject,
+                Message=message
+            )
+        except Exception as e:
+            print(f"Failed to send notification: {str(e)}")
+
+def handler(event, context):
+    path = event.get('rawPath', event.get('path', ''))
+    action = path.strip('/').lower()
+
+    try:
+        if action == 'start':
+            ec2.start_instances(InstanceIds=[instance_id])
+            send_notification(
+                'Minecraft Server Starting',
+                f'The Minecraft server is starting.\n\nInstance ID: {instance_id}\n\nThe server will be ready in a few minutes.'
+            )
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'message': 'Starting instance', 'instance_id': instance_id})
+            }
+        elif action == 'stop':
+            ec2.stop_instances(InstanceIds=[instance_id])
+            send_notification(
+                'Minecraft Server Stopping',
+                f'The Minecraft server is stopping.\n\nInstance ID: {instance_id}\n\nThe server will be offline shortly.'
+            )
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'message': 'Stopping instance', 'instance_id': instance_id})
+            }
+        elif action == 'restart':
+            ec2.reboot_instances(InstanceIds=[instance_id])
+            send_notification(
+                'Minecraft Server Restarting',
+                f'The Minecraft server is restarting.\n\nInstance ID: {instance_id}\n\nThe server will be back online in a few minutes.'
+            )
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'message': 'Restarting instance', 'instance_id': instance_id})
+            }
+        elif action == 'status':
+            response = ec2.describe_instances(InstanceIds=[instance_id])
+            state = response['Reservations'][0]['Instances'][0]['State']['Name']
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'instance_id': instance_id, 'state': state})
+            }
+        else:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Invalid action. Use /start, /stop, /restart, or /status'})
+            }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': str(e)})
+        }
+EOF
+  filename = "${path.module}/lambda/index.py"
+}
+
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = local_file.lambda_code.filename
+  output_path = "${path.module}/lambda/function.zip"
+  depends_on  = [local_file.lambda_code]
+}
+
+# API Gateway HTTP API
+resource "aws_apigatewayv2_api" "control_api" {
+  name          = "${var.project_name}-control-api"
+  protocol_type = "HTTP"
+  description   = "API for controlling Minecraft server instance"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST"]
+    allow_headers = ["*"]
+  }
+
+  tags = {
+    Name        = "${var.project_name}-control-api"
+    Environment = var.environment
+  }
+}
+
+# API Gateway integration with Lambda
+resource "aws_apigatewayv2_integration" "lambda_integration" {
+  api_id           = aws_apigatewayv2_api.control_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.instance_control.invoke_arn
+  payload_format_version = "2.0"
+}
+
+# API Gateway routes
+resource "aws_apigatewayv2_route" "start_route" {
+  api_id    = aws_apigatewayv2_api.control_api.id
+  route_key = "GET /start"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "stop_route" {
+  api_id    = aws_apigatewayv2_api.control_api.id
+  route_key = "GET /stop"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "restart_route" {
+  api_id    = aws_apigatewayv2_api.control_api.id
+  route_key = "GET /restart"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_route" "status_route" {
+  api_id    = aws_apigatewayv2_api.control_api.id
+  route_key = "GET /status"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+# API Gateway stage
+resource "aws_apigatewayv2_stage" "default_stage" {
+  api_id      = aws_apigatewayv2_api.control_api.id
+  name        = "$default"
+  auto_deploy = true
+
+  tags = {
+    Name        = "${var.project_name}-default-stage"
+    Environment = var.environment
+  }
+}
+
+# Lambda permission for API Gateway
+resource "aws_lambda_permission" "api_gateway_invoke" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.instance_control.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.control_api.execution_arn}/*/*"
+}
+
+# ACM Certificate for custom domain (only if domain is configured)
+resource "aws_acm_certificate" "api_cert" {
+  count             = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
+  domain_name       = "${var.subdomain_name}.${var.domain_name}"
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-api-cert"
+    Environment = var.environment
+  }
+}
+
+# ACM Certificate validation
+resource "aws_route53_record" "cert_validation" {
+  for_each = var.domain_name != "" && var.subdomain_name != "" ? {
+    for dvo in aws_acm_certificate.api_cert[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main[0].zone_id
+}
+
+resource "aws_acm_certificate_validation" "api_cert_validation" {
+  count                   = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
+  certificate_arn         = aws_acm_certificate.api_cert[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+# API Gateway custom domain
+resource "aws_apigatewayv2_domain_name" "api_domain" {
+  count       = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
+  domain_name = "${var.subdomain_name}.${var.domain_name}"
+
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate.api_cert[0].arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+
+  depends_on = [aws_acm_certificate_validation.api_cert_validation]
+
+  tags = {
+    Name        = "${var.project_name}-api-domain"
+    Environment = var.environment
+  }
+}
+
+# API Gateway domain mapping
+resource "aws_apigatewayv2_api_mapping" "api_mapping" {
+  count       = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
+  api_id      = aws_apigatewayv2_api.control_api.id
+  domain_name = aws_apigatewayv2_domain_name.api_domain[0].id
+  stage       = aws_apigatewayv2_stage.default_stage.id
+}
+
+# Update Route53 to point API subdomain to API Gateway
+resource "aws_route53_record" "api_alias" {
+  count   = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
+  zone_id = data.aws_route53_zone.main[0].zone_id
+  name    = "${var.subdomain_name}.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = aws_apigatewayv2_domain_name.api_domain[0].domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.api_domain[0].domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
   }
 }

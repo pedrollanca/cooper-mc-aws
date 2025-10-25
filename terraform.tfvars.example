@@ -11,10 +11,10 @@ environment    = "prod"
 vpc_cidr    = "10.0.0.0/26" # 64 IPs
 subnet_cidr = "10.0.0.0/28" # 16 IPs
 
-# EC2 Configuration
-instance_type   = "t3.medium"  # Upgrade from micro for better performance (recommended)
-server_memory   = "3G"     # Adjust based on instance type
-ebs_volume_size = 30          # GB for Minecraft data
+# EC2 Configuration - Using Graviton (ARM64) for better price/performance
+instance_type   = "t4g.medium"  # Graviton equivalent to t3.medium (4GB RAM, 2 vCPUs)
+server_memory   = "3G"          # Adjust based on instance type (t4g.medium has 4GB RAM)
+ebs_volume_size = 30            # GB for Minecraft data
 
 # Backup Configuration
 snapshot_retention_days = 7
@@ -23,8 +23,9 @@ snapshot_retention_days = 7
 ssh_allowed_ips = ["0.0.0.0/0"] # Change to ["YOUR_IP/32"] for security
 
 # Route53 Configuration - Fill these in after setting up your domain
-domain_name    = "example.com" # Your domain in Route53
-subdomain_name = "mc"          # Will create mc.example.com
+domain_name         = "example.com" # Your domain in Route53
+subdomain_name      = "mc"          # Used for API control endpoints (mc.example.com/start, /stop, etc.)
+game_subdomain_name = "play"        # Used for Minecraft game connections (play.example.com)
 
 # Minecraft Server Configuration
 max_players  = 20
@@ -33,3 +34,6 @@ rcon_password = "YOUR_SECURE_RCON_PASSWORD" # Change this!
 
 # NLB Protection
 enable_deletion_protection = false # Set to true for production
+
+# Email Notifications (optional)
+notification_email = "" # Email to receive start/stop notifications (e.g., "you@example.com")

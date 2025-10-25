@@ -15,8 +15,8 @@ output "instance_private_ip" {
 
 output "minecraft_server_address" {
   description = "Address to connect to the Minecraft server"
-  value = var.domain_name != "" && var.subdomain_name != "" ? (
-    "${var.subdomain_name}.${var.domain_name}"
+  value = var.domain_name != "" && var.game_subdomain_name != "" ? (
+    "${var.game_subdomain_name}.${var.domain_name}"
   ) : aws_eip.minecraft_eip.public_ip
 }
 
@@ -40,9 +40,14 @@ output "vpc_id" {
   value       = aws_vpc.minecraft_vpc.id
 }
 
+output "ssh_key_path" {
+  description = "Path to the generated SSH private key"
+  value       = local_file.private_key.filename
+}
+
 output "ssh_command" {
   description = "SSH command to connect to the server"
-  value       = "ssh -i <your-key.pem> ec2-user@${aws_eip.minecraft_eip.public_ip}"
+  value       = "ssh -i ${local_file.private_key.filename} ec2-user@${aws_eip.minecraft_eip.public_ip}"
 }
 
 output "ssm_command" {
@@ -58,4 +63,29 @@ output "server_logs_command" {
 output "backup_volume_command" {
   description = "Command to manually create a snapshot backup"
   value       = "/usr/local/bin/minecraft-backup.sh"
+}
+
+output "control_api_url" {
+  description = "Base URL for the control API"
+  value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}" : aws_apigatewayv2_api.control_api.api_endpoint
+}
+
+output "start_url" {
+  description = "URL to start the Minecraft server"
+  value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}/start" : "${aws_apigatewayv2_api.control_api.api_endpoint}/start"
+}
+
+output "stop_url" {
+  description = "URL to stop the Minecraft server"
+  value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}/stop" : "${aws_apigatewayv2_api.control_api.api_endpoint}/stop"
+}
+
+output "restart_url" {
+  description = "URL to restart the Minecraft server"
+  value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}/restart" : "${aws_apigatewayv2_api.control_api.api_endpoint}/restart"
+}
+
+output "status_url" {
+  description = "URL to check the Minecraft server status"
+  value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}/status" : "${aws_apigatewayv2_api.control_api.api_endpoint}/status"
 }

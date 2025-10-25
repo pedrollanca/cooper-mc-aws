@@ -40,9 +40,9 @@ variable "subnet_cidr" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type"
+  description = "EC2 instance type (Graviton/ARM64)"
   type        = string
-  default     = "t3.micro"
+  default     = "t4g.medium"
 }
 
 variable "ebs_volume_size" {
@@ -70,9 +70,15 @@ variable "domain_name" {
 }
 
 variable "subdomain_name" {
-  description = "Subdomain name for Minecraft server (e.g., mc or minecraft)"
+  description = "Subdomain name for API control endpoints (e.g., mc or api)"
   type        = string
   default     = "mc"
+}
+
+variable "game_subdomain_name" {
+  description = "Subdomain name for Minecraft game server (e.g., play or game)"
+  type        = string
+  default     = "play"
 }
 
 variable "max_players" {
@@ -104,4 +110,10 @@ variable "enable_deletion_protection" {
   description = "Enable deletion protection for NLB"
   type        = bool
   default     = false
+}
+
+variable "notification_email" {
+  description = "Email address to receive notifications when server starts/stops"
+  type        = string
+  default     = ""
 }
