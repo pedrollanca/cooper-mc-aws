@@ -156,5 +156,3 @@ systemctl start minecraft.service
 
 # Install CloudWatch agent (optional but recommended)
 dnf install -y amazon-cloudwatch-agent
-
-# Backups are handled by AWS DLM (Data Lifecycle Manager) - see main.tf
