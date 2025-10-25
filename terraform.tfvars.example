@@ -1,0 +1,35 @@
+# Copy this file to terraform.tfvars and fill in your values
+# terraform.tfvars is gitignored and will not be committed
+
+aws_region     = "us-east-1"
+aws_account_id = "123456789012" # Your AWS Account ID
+aws_role_arn   = "arn:aws:iam::123456789012:role/TerraformCloudRole" # IAM role for Terraform Cloud
+project_name   = "minecraft-server"
+environment    = "prod"
+
+# VPC Configuration
+vpc_cidr    = "10.0.0.0/26" # 64 IPs
+subnet_cidr = "10.0.0.0/28" # 16 IPs
+
+# EC2 Configuration
+instance_type   = "t3.medium"  # Upgrade from micro for better performance (recommended)
+server_memory   = "3G"     # Adjust based on instance type
+ebs_volume_size = 30          # GB for Minecraft data
+
+# Backup Configuration
+snapshot_retention_days = 7
+
+# Security - IMPORTANT: Restrict SSH access to your IP
+ssh_allowed_ips = ["0.0.0.0/0"] # Change to ["YOUR_IP/32"] for security
+
+# Route53 Configuration - Fill these in after setting up your domain
+domain_name    = "example.com" # Your domain in Route53
+subdomain_name = "mc"          # Will create mc.example.com
+
+# Minecraft Server Configuration
+max_players  = 20
+server_motd  = "A Vanilla Minecraft Server"
+rcon_password = "YOUR_SECURE_RCON_PASSWORD" # Change this!
+
+# NLB Protection
+enable_deletion_protection = false # Set to true for production
