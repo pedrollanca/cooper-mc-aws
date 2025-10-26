@@ -12,8 +12,8 @@ vpc_cidr    = "10.0.0.0/26" # 64 IPs
 subnet_cidr = "10.0.0.0/28" # 16 IPs
 
 # EC2 Configuration - Using Graviton (ARM64) for better price/performance
-instance_type   = "t4g.medium"  # Graviton equivalent to t3.medium (4GB RAM, 2 vCPUs)
-server_memory   = "3G"          # Adjust based on instance type (t4g.medium has 4GB RAM)
+instance_type   = "t4g.large"  # Graviton equivalent to t3.medium (4GB RAM, 2 vCPUs)
+server_memory   = "6G"          # Adjust based on instance type (t4g.medium has 4GB RAM)
 ebs_volume_size = 30            # GB for Minecraft data
 
 # Backup Configuration
