@@ -252,6 +252,10 @@ data "aws_availability_zones" "available" {
 resource "tls_private_key" "minecraft_ssh_key" {
   algorithm = "RSA"
   rsa_bits  = 4096
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Create AWS key pair
@@ -385,7 +389,7 @@ resource "aws_ebs_volume" "minecraft_data" {
   }
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
