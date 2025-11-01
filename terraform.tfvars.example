@@ -37,3 +37,7 @@ enable_deletion_protection = false # Set to true for production
 
 # Email Notifications (optional)
 notification_email = "" # Email to receive start/stop notifications (e.g., "you@example.com")
+
+# API Authentication
+api_auth_username = "admin"
+api_auth_password = "changeme" # Change this to a secure password!
