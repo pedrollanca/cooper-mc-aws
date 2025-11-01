@@ -117,3 +117,16 @@ variable "notification_email" {
   type        = string
   default     = ""
 }
+
+variable "api_auth_username" {
+  description = "Username for API basic authentication"
+  type        = string
+  sensitive   = true
+  default     = "admin"
+}
+
+variable "api_auth_password" {
+  description = "Password for API basic authentication"
+  type        = string
+  sensitive   = true
+}

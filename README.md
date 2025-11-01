@@ -14,7 +14,9 @@ This Terraform configuration deploys a complete Minecraft server infrastructure 
 - **Remote Access**: SSM Session Manager (no SSH keys needed) and optional EC2 Instance Connect
 - **Monitoring**: CloudWatch Logs integration for server logs
 - **Control API**: Lambda-powered API Gateway endpoints to start/stop the server remotely
+- **CloudFront Protection**: Basic authentication and geo-restrictions (US-only access)
 - **Email Notifications**: Optional SNS notifications when server starts or stops
+- **API Throttling**: Rate limiting to prevent abuse (2 req/s, 5 burst)
 
 ## Features
 
@@ -27,7 +29,7 @@ This Terraform configuration deploys a complete Minecraft server infrastructure 
 - **Remote Control**: Start/stop/restart server via simple HTTPS endpoints
 - **Custom Domain**: Optional Route53 integration for branded URLs
 - **Email Alerts**: Get notified when server state changes
-- **Secure**: Encrypted EBS volume, restrictive security groups, HTTPS API with TLS 1.2+
+- **Secure**: Encrypted EBS volume, restrictive security groups, HTTPS API with TLS 1.2+, basic auth, geo-restrictions, and rate limiting
 
 ## Prerequisites
 
@@ -60,8 +62,13 @@ Key variables in `terraform.tfvars`:
 
 **Domain & Notifications:**
 - `domain_name`: Your Route53 hosted zone (optional)
-- `subdomain_name`: Subdomain for the server (default: "mc")
+- `subdomain_name`: Subdomain for API control endpoints (default: "mc")
+- `game_subdomain_name`: Subdomain for Minecraft server (default: "play")
 - `notification_email`: Email for start/stop alerts (optional)
+
+**API Security:**
+- `api_auth_username`: Username for API basic authentication (default: "admin")
+- `api_auth_password`: Password for API basic authentication (required, rotate regularly)
 
 ## Usage
 
@@ -85,23 +92,32 @@ Or use the public IP from Terraform outputs if no domain configured.
 
 ### Remote Server Control
 
-Control the server via HTTPS endpoints:
+Control the server via HTTPS endpoints with basic authentication:
 
 ```bash
 # Start the server
-curl https://mc.yourdomain.com/start
+curl -u admin:yourpassword https://mc-server.yourdomain.com/start
 
 # Stop the server
-curl https://mc.yourdomain.com/stop
+curl -u admin:yourpassword https://mc-server.yourdomain.com/stop
 
 # Restart the server
-curl https://mc.yourdomain.com/restart
+curl -u admin:yourpassword https://mc-server.yourdomain.com/restart
 
 # Check server status
-curl https://mc.yourdomain.com/status
+curl -u admin:yourpassword https://mc-server.yourdomain.com/status
 ```
 
-Or simply visit the URLs in your browser. Each action returns a JSON response and sends an email notification (if configured).
+Or visit the URLs in your browser (you'll be prompted for username/password). Each action returns a JSON response and sends an email notification (if configured).
+
+**Security Features:**
+- **Basic Authentication**: Username/password protection (configurable in `terraform.tfvars`)
+- **Geo-Restriction**: API only accessible from within the United States
+- **Rate Limiting**: 2 requests/second with burst of 5 to prevent abuse
+- **HTTPS Only**: All traffic encrypted with TLS 1.2+
+
+**Rotating Credentials:**
+To change the API password, update `api_auth_username` and `api_auth_password` in `terraform.tfvars` and run `terraform apply`.
 
 ### Email Notifications
 

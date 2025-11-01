@@ -904,6 +904,11 @@ resource "aws_apigatewayv2_stage" "default_stage" {
   name        = "$default"
   auto_deploy = true
 
+  default_route_settings {
+    throttling_burst_limit = 5
+    throttling_rate_limit  = 2
+  }
+
   tags = {
     Name        = "${var.project_name}-default-stage"
     Environment = var.environment
@@ -986,7 +991,108 @@ resource "aws_apigatewayv2_api_mapping" "api_mapping" {
   stage       = aws_apigatewayv2_stage.default_stage.id
 }
 
-# Update Route53 to point API subdomain to API Gateway
+# CloudFront Function for Basic Authentication
+resource "aws_cloudfront_function" "basic_auth" {
+  name    = "${var.project_name}-basic-auth"
+  runtime = "cloudfront-js-2.0"
+  comment = "Basic authentication for API endpoints"
+  publish = true
+  code    = <<-EOF
+function handler(event) {
+  var req = event.request;
+  var auth = req.headers['authorization'] && req.headers['authorization'].value;
+
+  var expected = "Basic ${base64encode("${var.api_auth_username}:${var.api_auth_password}")}";
+
+  if (auth !== expected) {
+    return {
+      statusCode: 401,
+      statusDescription: 'Unauthorized',
+      headers: { 'www-authenticate': { value: 'Basic realm="API Authentication Required"' } }
+    };
+  }
+
+  return req;
+}
+EOF
+}
+
+# CloudFront Origin Access Control for API Gateway
+resource "aws_cloudfront_origin_access_control" "api_gateway" {
+  name                              = "${var.project_name}-api-gateway-oac"
+  description                       = "Origin access control for API Gateway"
+  origin_access_control_origin_type = "lambda"
+  signing_behavior                  = "no-override"
+  signing_protocol                  = "sigv4"
+}
+
+# CloudFront Distribution
+resource "aws_cloudfront_distribution" "api_distribution" {
+  enabled             = true
+  comment             = "${var.project_name} API distribution with basic auth"
+  aliases             = var.domain_name != "" && var.subdomain_name != "" ? ["${var.subdomain_name}.${var.domain_name}"] : []
+  price_class         = "PriceClass_100"
+  default_root_object = ""
+
+  origin {
+    domain_name = var.domain_name != "" && var.subdomain_name != "" ? aws_apigatewayv2_domain_name.api_domain[0].domain_name_configuration[0].target_domain_name : replace(aws_apigatewayv2_api.control_api.api_endpoint, "https://", "")
+    origin_id   = "api-gateway"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "api-gateway"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Host"]
+
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
+    compress               = true
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.basic_auth.arn
+    }
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "whitelist"
+      locations        = ["US"]
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = var.domain_name == "" || var.subdomain_name == "" ? true : false
+    acm_certificate_arn            = var.domain_name != "" && var.subdomain_name != "" ? aws_acm_certificate.api_cert[0].arn : null
+    ssl_support_method             = var.domain_name != "" && var.subdomain_name != "" ? "sni-only" : null
+    minimum_protocol_version       = "TLSv1.2_2021"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-api-distribution"
+    Environment = var.environment
+  }
+}
+
+# Update Route53 to point API subdomain to CloudFront (instead of API Gateway directly)
 resource "aws_route53_record" "api_alias" {
   count   = var.domain_name != "" && var.subdomain_name != "" ? 1 : 0
   zone_id = data.aws_route53_zone.main[0].zone_id
@@ -994,8 +1100,8 @@ resource "aws_route53_record" "api_alias" {
   type    = "A"
 
   alias {
-    name                   = aws_apigatewayv2_domain_name.api_domain[0].domain_name_configuration[0].target_domain_name
-    zone_id                = aws_apigatewayv2_domain_name.api_domain[0].domain_name_configuration[0].hosted_zone_id
+    name                   = aws_cloudfront_distribution.api_distribution.domain_name
+    zone_id                = aws_cloudfront_distribution.api_distribution.hosted_zone_id
     evaluate_target_health = false
   }
 }

@@ -89,3 +89,18 @@ output "status_url" {
   description = "URL to check the Minecraft server status"
   value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}/status" : "${aws_apigatewayv2_api.control_api.api_endpoint}/status"
 }
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID"
+  value       = aws_cloudfront_distribution.api_distribution.id
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name"
+  value       = aws_cloudfront_distribution.api_distribution.domain_name
+}
+
+output "api_auth_info" {
+  description = "API authentication information"
+  value       = "Use Basic Auth with username from api_auth_username and password from api_auth_password variables"
+}
