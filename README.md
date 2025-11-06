@@ -156,4 +156,15 @@ sudo journalctl -u minecraft.service -f
 /usr/local/bin/minecraft-backup.sh
 ```
 
+**Upgrade Paper and Plugins:**
+```bash
+sudo /usr/local/bin/minecraft-upgrade.sh
+```
+This script will:
+- Stop the Minecraft server gracefully
+- Backup current Paper jar and plugins
+- Download the latest Paper version for Minecraft 1.21.4
+- Update GeyserMC and Floodgate to latest versions
+- Restart the server with upgraded software
+
 **Important:** The `.pem` file is automatically gitignored. Keep it secure and don't commit it to version control.

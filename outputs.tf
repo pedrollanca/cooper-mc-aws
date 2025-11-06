@@ -65,6 +65,11 @@ output "backup_volume_command" {
   value       = "/usr/local/bin/minecraft-backup.sh"
 }
 
+output "upgrade_server_command" {
+  description = "Command to upgrade Paper and plugins to latest versions"
+  value       = "sudo /usr/local/bin/minecraft-upgrade.sh"
+}
+
 output "control_api_url" {
   description = "Base URL for the control API"
   value       = var.domain_name != "" && var.subdomain_name != "" ? "https://${var.subdomain_name}.${var.domain_name}" : aws_apigatewayv2_api.control_api.api_endpoint

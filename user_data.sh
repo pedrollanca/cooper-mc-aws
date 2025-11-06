@@ -41,9 +41,11 @@ sudo -u minecraft curl -L -o plugins/Geyser-Spigot.jar https://download.geysermc
 # Download Floodgate (allows Bedrock players without Java accounts)
 sudo -u minecraft curl -L -o plugins/floodgate-spigot.jar https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot
 
-# Download Paper (required for GeyserMC plugins)
+# Download latest Paper version
 cd /opt/minecraft
-sudo -u minecraft curl -L -o paper.jar https://fill-data.papermc.io/v1/objects/c9dc93d44d0b0b414f7db9c746966c3991a33886c70fe04c403fd90381984088/paper-1.21.10-87.jar
+MINECRAFT_VERSION="1.21.10"
+LATEST_BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/$MINECRAFT_VERSION" | sed 's/.*"builds":\[//;s/\].*//' | tr ',' '\n' | tail -1)
+sudo -u minecraft curl -L -o paper.jar "https://api.papermc.io/v2/projects/paper/versions/$MINECRAFT_VERSION/builds/$LATEST_BUILD/downloads/paper-$MINECRAFT_VERSION-$LATEST_BUILD.jar"
 
 # Create server directory structure
 sudo -u minecraft mkdir -p /mnt/minecraft-data/world
@@ -96,6 +98,68 @@ remote:
 GEYSEREOF
   chown minecraft:minecraft /mnt/minecraft-data/plugins/Geyser-Spigot/config.yml
 fi
+
+# Create upgrade script for Paper and plugins
+cat > /usr/local/bin/minecraft-upgrade.sh <<UPGRADEEOF
+#!/bin/bash
+# Upgrade Paper and all plugins to latest versions
+
+echo "Starting Minecraft Paper and plugins upgrade..."
+
+# Stop the server if running
+if systemctl is-active --quiet minecraft.service; then
+    echo "Stopping Minecraft server..."
+    systemctl stop minecraft.service
+
+    # Wait for server to stop
+    timeout=30
+    while systemctl is-active --quiet minecraft.service && [ \$timeout -gt 0 ]; do
+        sleep 1
+        timeout=\$((timeout - 1))
+    done
+fi
+
+cd /opt/minecraft
+
+# Backup current paper.jar
+if [ -f paper.jar ]; then
+    echo "Backing up current Paper jar..."
+    cp paper.jar paper.jar.backup
+fi
+
+# Download latest Paper version
+echo "Downloading latest Paper..."
+MINECRAFT_VERSION="1.21.10"
+LATEST_BUILD=\$(curl -s "https://api.papermc.io/v2/projects/paper/versions/\$MINECRAFT_VERSION" | sed 's/.*"builds":\[//;s/\].*//' | tr ',' '\n' | tail -1)
+sudo -u minecraft curl -L -o paper.jar "https://api.papermc.io/v2/projects/paper/versions/\$MINECRAFT_VERSION/builds/\$LATEST_BUILD/downloads/paper-\$MINECRAFT_VERSION-\$LATEST_BUILD.jar"
+
+echo "Paper upgraded successfully!"
+
+# Backup and upgrade GeyserMC
+if [ -f plugins/Geyser-Spigot.jar ]; then
+    echo "Backing up and upgrading GeyserMC..."
+    cp plugins/Geyser-Spigot.jar plugins/Geyser-Spigot.jar.backup
+fi
+sudo -u minecraft curl -L -o plugins/Geyser-Spigot.jar https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
+
+# Backup and upgrade Floodgate
+if [ -f plugins/floodgate-spigot.jar ]; then
+    echo "Backing up and upgrading Floodgate..."
+    cp plugins/floodgate-spigot.jar plugins/floodgate-spigot.jar.backup
+fi
+sudo -u minecraft curl -L -o plugins/floodgate-spigot.jar https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot
+
+# Copy upgraded plugins to data directory
+echo "Copying upgraded plugins to data directory..."
+sudo -u minecraft cp -f plugins/*.jar /mnt/minecraft-data/plugins/
+
+echo "Upgrade complete! Starting Minecraft server..."
+systemctl start minecraft.service
+
+echo "Done! Monitor server startup with: sudo journalctl -u minecraft.service -f"
+UPGRADEEOF
+
+chmod +x /usr/local/bin/minecraft-upgrade.sh
 
 # Create graceful shutdown script
 cat > /usr/local/bin/minecraft-stop.sh <<STOPEOF
