@@ -111,8 +111,8 @@ fi
 # Download latest Fabric server launcher
 echo "Downloading latest Fabric..."
 MINECRAFT_VERSION="1.20.1"
-FABRIC_LOADER_VERSION="0.16.11"
-FABRIC_INSTALLER_VERSION="1.0.1"
+FABRIC_LOADER_VERSION="0.18.4"
+FABRIC_INSTALLER_VERSION="1.1.0"
 sudo -u minecraft curl -L -o fabric-installer.jar "https://meta.fabricmc.net/v2/versions/loader/$MINECRAFT_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar"
 
 echo "Fabric upgraded successfully!"
@@ -127,7 +127,7 @@ echo "Upgrading Fabric API..."
 sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/P7uGFii0/fabric-api-0.92.2%2B1.20.1.jar"
 
 echo "Upgrading Cobblemon..."
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/QiEBFB5s/Cobblemon-fabric-1.5.2%2B1.20.1.jar"
+sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/EVozVxCq/Cobblemon-fabric-1.5.2%2B1.20.1.jar"
 
 echo "Upgrade complete! Starting Minecraft server..."
 systemctl start minecraft.service
