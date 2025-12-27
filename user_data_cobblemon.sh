@@ -12,8 +12,10 @@ systemctl start amazon-ssm-agent
 # Install Java 21 (required for Minecraft 1.20.1+)
 dnf install -y java-21-amazon-corretto-headless
 
-# Create minecraft user
-useradd -m -r -s /bin/bash minecraft
+# Create minecraft user (only if it doesn't exist)
+if ! id -u minecraft >/dev/null 2>&1; then
+  useradd -m -r -s /bin/bash minecraft
+fi
 
 # Create minecraft directory
 mkdir -p /opt/minecraft
@@ -26,9 +28,11 @@ fi
 mkdir -p /mnt/minecraft-data
 mount /dev/nvme1n1 /mnt/minecraft-data || mount -a
 
-# Add to fstab for auto-mount on reboot
+# Add to fstab for auto-mount on reboot (only if not already there)
 UUID=$(blkid -s UUID -o value /dev/nvme1n1)
-echo "UUID=$UUID /mnt/minecraft-data ext4 defaults,nofail 0 2" >> /etc/fstab
+if ! grep -q "$UUID" /etc/fstab; then
+  echo "UUID=$UUID /mnt/minecraft-data ext4 defaults,nofail 0 2" >> /etc/fstab
+fi
 
 # Set permissions
 chown -R minecraft:minecraft /mnt/minecraft-data
@@ -37,7 +41,7 @@ chown -R minecraft:minecraft /mnt/minecraft-data
 cd /opt/minecraft
 
 # Download Fabric server launcher
-MINECRAFT_VERSION="1.20.1"
+MINECRAFT_VERSION="1.21.1"
 FABRIC_LOADER_VERSION="0.18.4"
 FABRIC_INSTALLER_VERSION="1.1.0"
 
@@ -47,10 +51,10 @@ sudo -u minecraft curl -L -o fabric-installer.jar "https://meta.fabricmc.net/v2/
 sudo -u minecraft mkdir -p /mnt/minecraft-data/mods
 
 # Download Fabric API (required dependency)
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/P7uGFii0/fabric-api-0.92.2%2B1.20.1.jar"
+sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/m6zu1K31/fabric-api-0.116.7%2B1.21.1.jar"
 
 # Download Cobblemon
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/EVozVxCq/Cobblemon-fabric-1.5.2%2B1.20.1.jar"
+sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/s64m1opn/Cobblemon-fabric-1.7.1%2B1.21.1.jar"
 
 # Accept EULA (only if it doesn't exist)
 if [ ! -f /mnt/minecraft-data/eula.txt ]; then
@@ -110,7 +114,7 @@ fi
 
 # Download latest Fabric server launcher
 echo "Downloading latest Fabric..."
-MINECRAFT_VERSION="1.20.1"
+MINECRAFT_VERSION="1.21.1"
 FABRIC_LOADER_VERSION="0.18.4"
 FABRIC_INSTALLER_VERSION="1.1.0"
 sudo -u minecraft curl -L -o fabric-installer.jar "https://meta.fabricmc.net/v2/versions/loader/$MINECRAFT_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar"
@@ -124,10 +128,10 @@ if [ -d /mnt/minecraft-data/mods ]; then
 fi
 
 echo "Upgrading Fabric API..."
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/P7uGFii0/fabric-api-0.92.2%2B1.20.1.jar"
+sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/m6zu1K31/fabric-api-0.116.7%2B1.21.1.jar"
 
 echo "Upgrading Cobblemon..."
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/EVozVxCq/Cobblemon-fabric-1.5.2%2B1.20.1.jar"
+sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/s64m1opn/Cobblemon-fabric-1.7.1%2B1.21.1.jar"
 
 echo "Upgrade complete! Starting Minecraft server..."
 systemctl start minecraft.service
