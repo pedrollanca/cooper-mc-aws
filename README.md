@@ -13,7 +13,7 @@ This Terraform configuration deploys a complete Minecraft server infrastructure 
 - **Persistent Storage**: Dedicated EBS volume for world data with lifecycle protection
 - **Automated Backups**: Daily snapshots via AWS Data Lifecycle Manager (DLM)
 - **Networking**: VPC with public subnet, Internet Gateway, and security groups
-- **Remote Access**: SSM Session Manager (no SSH keys needed) and optional EC2 Instance Connect
+- **Remote Access**: SSH with auto-generated key pair
 - **Monitoring**: CloudWatch Logs integration for server logs
 - **Control API**: Lambda-powered API Gateway endpoints to start/stop the server remotely
 - **CloudFront Protection**: Basic authentication and geo-restrictions (US-only access)
@@ -191,11 +191,6 @@ ssh -i <project-name>-key.pem ec2-user@<server-ip>
 
 # Or copy the exact command from terraform outputs:
 terraform output ssh_command
-```
-
-Alternatively, use AWS Systems Manager Session Manager (no SSH keys needed):
-```bash
-aws ssm start-session --target <instance-id> --region <region>
 ```
 
 **View Logs:**
