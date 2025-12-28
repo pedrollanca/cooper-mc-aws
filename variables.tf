@@ -106,6 +106,12 @@ variable "rcon_password" {
   default     = "changeme123"
 }
 
+variable "admin_username" {
+  description = "Minecraft username to grant admin (op) permissions"
+  type        = string
+  default     = ""
+}
+
 variable "enable_deletion_protection" {
   description = "Enable deletion protection for NLB"
   type        = bool

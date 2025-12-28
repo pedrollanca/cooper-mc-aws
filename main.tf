@@ -372,6 +372,7 @@ locals {
     rcon_password  = var.rcon_password
     server_memory  = var.server_memory
     aws_region     = var.aws_region
+    admin_username = var.admin_username
   })
 }
 

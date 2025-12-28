@@ -31,6 +31,7 @@ game_subdomain_name = "play"        # Used for Minecraft game connections (play.
 max_players  = 20
 server_motd  = "A Vanilla Minecraft Server"
 rcon_password = "YOUR_SECURE_RCON_PASSWORD" # Change this!
+admin_username = "YourMinecraftUsername"
 
 # NLB Protection
 enable_deletion_protection = false # Set to true for production
