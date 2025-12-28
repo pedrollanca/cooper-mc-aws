@@ -112,6 +112,52 @@ variable "admin_username" {
   default     = ""
 }
 
+variable "minecraft_version" {
+  description = "Minecraft version to install"
+  type        = string
+  default     = "1.21.1"
+}
+
+variable "server_type" {
+  description = "Server type: vanilla, paper, or fabric"
+  type        = string
+  default     = "fabric"
+  validation {
+    condition     = contains(["vanilla", "paper", "fabric"], var.server_type)
+    error_message = "Server type must be vanilla, paper, or fabric."
+  }
+}
+
+variable "server_jar_url" {
+  description = "URL to download server jar (only for vanilla or paper). Leave empty for fabric."
+  type        = string
+  default     = ""
+}
+
+variable "fabric_loader_version" {
+  description = "Fabric loader version (only used if server_type is fabric)"
+  type        = string
+  default     = "0.18.4"
+}
+
+variable "fabric_installer_version" {
+  description = "Fabric installer version (only used if server_type is fabric)"
+  type        = string
+  default     = "1.1.0"
+}
+
+variable "mod_urls" {
+  description = "List of mod URLs to download (for Fabric)"
+  type        = list(string)
+  default     = []
+}
+
+variable "plugin_urls" {
+  description = "List of plugin URLs to download (for Paper)"
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_deletion_protection" {
   description = "Enable deletion protection for NLB"
   type        = bool

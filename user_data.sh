@@ -37,24 +37,79 @@ fi
 # Set permissions
 chown -R minecraft:minecraft /mnt/minecraft-data
 
-# Cobblemon setup - using Fabric and Minecraft 1.20.1
+# Minecraft server setup
 cd /opt/minecraft
+MINECRAFT_VERSION="${minecraft_version}"
+SERVER_TYPE="${server_type}"
 
-# Download Fabric server launcher
-MINECRAFT_VERSION="1.21.1"
-FABRIC_LOADER_VERSION="0.18.4"
-FABRIC_INSTALLER_VERSION="1.1.0"
+# Setup based on server type
+if [ "$SERVER_TYPE" = "fabric" ]; then
+  echo "Setting up Fabric server..."
+  FABRIC_LOADER_VERSION="${fabric_loader_version}"
+  FABRIC_INSTALLER_VERSION="${fabric_installer_version}"
 
-sudo -u minecraft curl -L -o fabric-installer.jar "https://meta.fabricmc.net/v2/versions/loader/$MINECRAFT_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar"
+  sudo -u minecraft curl -L -o server.jar "https://meta.fabricmc.net/v2/versions/loader/$MINECRAFT_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar"
 
-# Create mods directory
-sudo -u minecraft mkdir -p /mnt/minecraft-data/mods
+  # Create mods directory
+  sudo -u minecraft mkdir -p /mnt/minecraft-data/mods
 
-# Download Fabric API (required dependency)
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/m6zu1K31/fabric-api-0.116.7%2B1.21.1.jar"
+  # Download mods if specified
+  MOD_URLS="${mod_urls}"
+  if [ -n "$MOD_URLS" ]; then
+    IFS=',' read -ra MODS <<< "$MOD_URLS"
+    for mod_url in "$${MODS[@]}"; do
+      if [ -n "$mod_url" ]; then
+        mod_filename=$(basename "$mod_url")
+        echo "Downloading mod: $mod_filename"
+        sudo -u minecraft curl -L -o "/mnt/minecraft-data/mods/$mod_filename" "$mod_url"
+      fi
+    done
+  fi
 
-# Download Cobblemon
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/s64m1opn/Cobblemon-fabric-1.7.1%2B1.21.1.jar"
+elif [ "$SERVER_TYPE" = "paper" ]; then
+  echo "Setting up Paper server..."
+  SERVER_JAR_URL="${server_jar_url}"
+
+  if [ -n "$SERVER_JAR_URL" ]; then
+    sudo -u minecraft curl -L -o server.jar "$SERVER_JAR_URL"
+  else
+    # Download latest Paper if no URL provided
+    echo "Downloading latest Paper..."
+    BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/$MINECRAFT_VERSION" | grep -o '"builds":\[[0-9]*\]' | grep -o '[0-9]*' | tail -1)
+    sudo -u minecraft curl -L -o server.jar "https://api.papermc.io/v2/projects/paper/versions/$MINECRAFT_VERSION/builds/$BUILD/downloads/paper-$MINECRAFT_VERSION-$BUILD.jar"
+  fi
+
+  # Create plugins directory
+  sudo -u minecraft mkdir -p /mnt/minecraft-data/plugins
+
+  # Download plugins if specified
+  PLUGIN_URLS="${plugin_urls}"
+  if [ -n "$PLUGIN_URLS" ]; then
+    IFS=',' read -ra PLUGINS <<< "$PLUGIN_URLS"
+    for plugin_url in "$${PLUGINS[@]}"; do
+      if [ -n "$plugin_url" ]; then
+        plugin_filename=$(basename "$plugin_url")
+        echo "Downloading plugin: $plugin_filename"
+        sudo -u minecraft curl -L -o "/mnt/minecraft-data/plugins/$plugin_filename" "$plugin_url"
+      fi
+    done
+  fi
+
+else
+  echo "Setting up Vanilla server..."
+  SERVER_JAR_URL="${server_jar_url}"
+
+  if [ -n "$SERVER_JAR_URL" ]; then
+    sudo -u minecraft curl -L -o server.jar "$SERVER_JAR_URL"
+  else
+    # Download vanilla server from Mojang
+    echo "Downloading vanilla Minecraft server $MINECRAFT_VERSION..."
+    MANIFEST=$(curl -s https://launchermeta.mojang.com/mc/game/version_manifest.json)
+    VERSION_URL=$(echo "$MANIFEST" | grep -o "\"url\":\"[^\"]*\"" | grep "$MINECRAFT_VERSION" | head -1 | cut -d'"' -f4)
+    SERVER_URL=$(curl -s "$VERSION_URL" | grep -o "\"server\":{\"sha1\":\"[^\"]*\",\"size\":[0-9]*,\"url\":\"[^\"]*\"" | cut -d'"' -f12)
+    sudo -u minecraft curl -L -o server.jar "$SERVER_URL"
+  fi
+fi
 
 # Accept EULA (only if it doesn't exist)
 if [ ! -f /mnt/minecraft-data/eula.txt ]; then
@@ -98,62 +153,7 @@ EOF
   chown minecraft:minecraft /mnt/minecraft-data/ops.json
 fi
 
-# Create upgrade script for Fabric and mods
-cat > /usr/local/bin/minecraft-upgrade.sh <<'UPGRADEEOF'
-#!/bin/bash
-# Upgrade Fabric server and Cobblemon to latest versions
-
-echo "Starting Minecraft Cobblemon upgrade..."
-
-# Stop the server if running
-if systemctl is-active --quiet minecraft.service; then
-    echo "Stopping Minecraft server..."
-    systemctl stop minecraft.service
-
-    # Wait for server to stop
-    timeout=30
-    while systemctl is-active --quiet minecraft.service && [ $timeout -gt 0 ]; do
-        sleep 1
-        timeout=$((timeout - 1))
-    done
-fi
-
-cd /opt/minecraft
-
-# Backup current fabric-installer.jar
-if [ -f fabric-installer.jar ]; then
-    echo "Backing up current Fabric jar..."
-    cp fabric-installer.jar fabric-installer.jar.backup
-fi
-
-# Download latest Fabric server launcher
-echo "Downloading latest Fabric..."
-MINECRAFT_VERSION="1.21.1"
-FABRIC_LOADER_VERSION="0.18.4"
-FABRIC_INSTALLER_VERSION="1.1.0"
-sudo -u minecraft curl -L -o fabric-installer.jar "https://meta.fabricmc.net/v2/versions/loader/$MINECRAFT_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar"
-
-echo "Fabric upgraded successfully!"
-
-# Backup and upgrade mods
-echo "Backing up mods..."
-if [ -d /mnt/minecraft-data/mods ]; then
-    cp -r /mnt/minecraft-data/mods /mnt/minecraft-data/mods.backup.$(date +%Y%m%d_%H%M%S)
-fi
-
-echo "Upgrading Fabric API..."
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/fabric-api.jar "https://cdn.modrinth.com/data/P7dR8mSH/versions/m6zu1K31/fabric-api-0.116.7%2B1.21.1.jar"
-
-echo "Upgrading Cobblemon..."
-sudo -u minecraft curl -L -o /mnt/minecraft-data/mods/cobblemon.jar "https://cdn.modrinth.com/data/MdwFAVRL/versions/s64m1opn/Cobblemon-fabric-1.7.1%2B1.21.1.jar"
-
-echo "Upgrade complete! Starting Minecraft server..."
-systemctl start minecraft.service
-
-echo "Done! Monitor server startup with: sudo journalctl -u minecraft.service -f"
-UPGRADEEOF
-
-chmod +x /usr/local/bin/minecraft-upgrade.sh
+# Note: Upgrade script removed - use terraform apply with new versions to upgrade
 
 # Create graceful shutdown script
 cat > /usr/local/bin/minecraft-stop.sh <<'STOPEOF'
@@ -188,14 +188,14 @@ chmod +x /usr/local/bin/minecraft-stop.sh
 # Create systemd service with proper shutdown handling
 cat > /etc/systemd/system/minecraft.service <<EOF
 [Unit]
-Description=Minecraft Cobblemon Server
+Description=Minecraft Server (${server_type})
 After=network.target
 
 [Service]
 Type=simple
 User=minecraft
 WorkingDirectory=/mnt/minecraft-data
-ExecStart=/usr/bin/java -Xmx${server_memory} -Xms${server_memory} -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar /opt/minecraft/fabric-installer.jar nogui
+ExecStart=/usr/bin/java -Xmx${server_memory} -Xms${server_memory} -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar /opt/minecraft/server.jar nogui
 ExecStop=/usr/local/bin/minecraft-stop.sh
 TimeoutStopSec=60
 Restart=on-failure

@@ -367,12 +367,19 @@ resource "aws_vpc_endpoint" "ec2" {
 # User data script for Minecraft installation
 locals {
   user_data = templatefile("${path.module}/user_data.sh", {
-    max_players    = var.max_players
-    server_motd    = var.server_motd
-    rcon_password  = var.rcon_password
-    server_memory  = var.server_memory
-    aws_region     = var.aws_region
-    admin_username = var.admin_username
+    max_players              = var.max_players
+    server_motd              = var.server_motd
+    rcon_password            = var.rcon_password
+    server_memory            = var.server_memory
+    aws_region               = var.aws_region
+    admin_username           = var.admin_username
+    minecraft_version        = var.minecraft_version
+    server_type              = var.server_type
+    server_jar_url           = var.server_jar_url
+    fabric_loader_version    = var.fabric_loader_version
+    fabric_installer_version = var.fabric_installer_version
+    mod_urls                 = join(",", var.mod_urls)
+    plugin_urls              = join(",", var.plugin_urls)
   })
 }
 
