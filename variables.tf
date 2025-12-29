@@ -112,6 +112,12 @@ variable "admin_username" {
   default     = ""
 }
 
+variable "admin_uuid" {
+  description = "Minecraft player UUID for admin user (get from https://mcuuid.net/)"
+  type        = string
+  default     = ""
+}
+
 variable "minecraft_version" {
   description = "Minecraft version to install"
   type        = string

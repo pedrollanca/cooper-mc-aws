@@ -140,10 +140,11 @@ EOF
 fi
 
 # Add admin user if specified
-if [ -n "${admin_username}" ] && [ ! -f /mnt/minecraft-data/ops.json ]; then
+if [ -n "${admin_username}" ] && [ -n "${admin_uuid}" ] && [ ! -f /mnt/minecraft-data/ops.json ]; then
   cat > /mnt/minecraft-data/ops.json <<EOF
 [
   {
+    "uuid": "${admin_uuid}",
     "name": "${admin_username}",
     "level": 4,
     "bypassesPlayerLimit": true

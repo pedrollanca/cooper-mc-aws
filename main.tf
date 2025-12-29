@@ -285,6 +285,7 @@ locals {
     server_memory            = var.server_memory
     aws_region               = var.aws_region
     admin_username           = var.admin_username
+    admin_uuid               = var.admin_uuid
     minecraft_version        = var.minecraft_version
     server_type              = var.server_type
     server_jar_url           = var.server_jar_url
