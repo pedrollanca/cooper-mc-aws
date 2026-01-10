@@ -10,6 +10,8 @@ This Terraform configuration deploys a complete Minecraft server infrastructure 
 - **Flexible Server Types**: Choose Vanilla, Paper (with plugins), or Fabric (with mods)
 - **Cross-Platform Support**: Optional GeyserMC plugin for Java + Bedrock Edition compatibility (Paper)
 - **Mod Support**: Fabric loader with customizable mod downloads (Cobblemon, Xaero's Minimap, etc.)
+- **Datapack Support**: Easy datapack installation via URL lists (works with all server types)
+- **Auto-Stop on Idle**: Automatically stops server after configurable idle time to save costs
 - **Persistent Storage**: Dedicated EBS volume for world data with lifecycle protection
 - **Automated Backups**: Daily snapshots via AWS Data Lifecycle Manager (DLM)
 - **Networking**: VPC with public subnet, Internet Gateway, and security groups
@@ -17,14 +19,15 @@ This Terraform configuration deploys a complete Minecraft server infrastructure 
 - **Monitoring**: CloudWatch Logs integration for server logs
 - **Control API**: Lambda-powered API Gateway endpoints to start/stop the server remotely
 - **CloudFront Protection**: Basic authentication and geo-restrictions (US-only access)
-- **Email Notifications**: Optional SNS notifications when server starts or stops
+- **Email Notifications**: Optional SNS notifications when server starts, stops, or auto-stops
 - **API Throttling**: Rate limiting to prevent abuse (2 req/s, 5 burst)
 
 ## Features
 
 - **Multiple Server Types**: Choose Vanilla, Paper (plugins), or Fabric (mods)
-- **Modding Support**: Easy mod/plugin installation via URL lists
+- **Modding Support**: Easy mod/plugin/datapack installation via URL lists
 - **Cross-Platform Play**: Optional GeyserMC support for Java and Bedrock players (Paper)
+- **Cost Optimization**: Auto-stop server when idle (no players) or unreachable to save money
 - **Data Persistence**: EBS volume survives instance recreation, preserving your world data
 - **Lifecycle Protection**: EBS volume cannot be accidentally deleted by Terraform
 - **Smart Initialization**: User data script detects existing data and won't overwrite it
@@ -33,7 +36,7 @@ This Terraform configuration deploys a complete Minecraft server infrastructure 
 - **Auto-Admin**: Automatically grant op permissions to specified player
 - **Remote Control**: Start/stop/restart server via simple HTTPS endpoints
 - **Custom Domain**: Optional Route53 integration for branded URLs
-- **Email Alerts**: Get notified when server state changes
+- **Email Alerts**: Get notified when server state changes or auto-stops
 - **Secure**: Encrypted EBS volume, restrictive security groups, HTTPS API with TLS 1.2+, basic auth, geo-restrictions, and rate limiting
 
 ## Prerequisites
@@ -81,6 +84,12 @@ Key variables in `terraform.tfvars`:
 - `fabric_loader_version`: Fabric loader version (e.g., "0.18.4")
 - `fabric_installer_version`: Fabric installer version (e.g., "1.1.0")
 - `mod_urls`: List of mod download URLs
+
+*For All Server Types:*
+- `datapack_urls`: List of datapack download URLs
+
+**Cost Optimization:**
+- `idle_timeout_seconds`: Time in seconds before auto-stopping when idle or unreachable (default: 3600 = 1 hour)
 
 **Domain & Notifications:**
 - `domain_name`: Your Route53 hosted zone (optional)
@@ -142,6 +151,16 @@ mod_urls = [
 ]
 ```
 
+**Adding Datapacks (Works with all server types):**
+```hcl
+datapack_urls = [
+  "https://example.com/your-datapack.zip",
+  "https://cdn.modrinth.com/data/xxx/versions/xxx/datapack.zip"
+]
+```
+
+Datapacks are automatically extracted to `/mnt/minecraft-data/world/datapacks/` on server startup.
+
 ### Remote Server Control
 
 Control the server via HTTPS endpoints with basic authentication:
@@ -171,13 +190,39 @@ Or visit the URLs in your browser (you'll be prompted for username/password). Ea
 **Rotating Credentials:**
 To change the API password, update `api_auth_username` and `api_auth_password` in `terraform.tfvars` and run `terraform apply`.
 
+### Auto-Stop on Idle (Cost Savings)
+
+The server automatically monitors player activity and server health every 10 minutes using RCON. It will auto-stop after the configured idle timeout (default: 1 hour) in these situations:
+
+1. **No players online** - Server running but empty
+2. **Server service stopped** - Minecraft service crashed or not running
+3. **RCON connection failed** - Server unresponsive or frozen
+
+**Benefits:**
+- Saves AWS costs when server is not in use
+- Prevents paying for crashed/frozen servers
+- Configurable timeout via `idle_timeout_seconds` variable
+
+**How it works:**
+- Cron job checks player count every 10 minutes via RCON
+- Tracks consecutive idle time
+- After threshold exceeded, sends email notification and stops EC2 instance
+- Different email messages for idle vs. server failure scenarios
+
+**Email notifications:**
+- "Server idle for 1 hour with no players online"
+- "Server unreachable - service not running"
+- "Server unreachable - RCON connection failed"
+
+To disable auto-stop, set `idle_timeout_seconds` to a very large number (e.g., 86400 for 24 hours).
+
 ### Email Notifications
 
 If you set `notification_email` in your `terraform.tfvars`:
 
 1. After `terraform apply`, AWS will send a confirmation email
 2. Click the confirmation link in the email
-3. You'll now receive emails when the server starts, stops, or restarts
+3. You'll now receive emails when the server starts, stops, restarts, or auto-stops
 
 ### Server Management
 

@@ -73,6 +73,11 @@ datapack_urls = [
   # "https://example.com/datapack2.zip"
 ]
 
+# ====================
+# AUTO-STOP CONFIGURATION
+# ====================
+idle_timeout_seconds = 3600 # 1 hour (in seconds) - auto-stop server when idle (no players) or unreachable
+
 # NLB Protection
 enable_deletion_protection = false # Set to true for production
 

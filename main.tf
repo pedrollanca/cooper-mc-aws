@@ -205,6 +205,25 @@ resource "aws_iam_role_policy" "minecraft_ec2_policy" {
           "ec2:DescribeVolumes"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:StopInstances"
+        ]
+        Resource = "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*"
+        Condition = {
+          StringEquals = {
+            "ec2:ResourceTag/Name" = "${var.project_name}-server"
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sns:Publish"
+        ]
+        Resource = var.notification_email != "" ? "arn:aws:sns:${var.aws_region}:${var.aws_account_id}:${var.project_name}-notifications" : "*"
       }
     ]
   })
@@ -293,6 +312,9 @@ locals {
     fabric_installer_version = var.fabric_installer_version
     mod_urls                 = join(",", var.mod_urls)
     plugin_urls              = join(",", var.plugin_urls)
+    datapack_urls            = join(",", var.datapack_urls)
+    sns_topic_arn            = var.notification_email != "" ? aws_sns_topic.server_notifications[0].arn : ""
+    idle_timeout_seconds     = var.idle_timeout_seconds
   })
 }
 

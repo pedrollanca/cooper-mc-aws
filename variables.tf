@@ -170,6 +170,12 @@ variable "datapack_urls" {
   default     = []
 }
 
+variable "idle_timeout_seconds" {
+  description = "Time in seconds before auto-stopping the server when idle (no players) or unreachable"
+  type        = number
+  default     = 3600 # 1 hour
+}
+
 variable "enable_deletion_protection" {
   description = "Enable deletion protection for NLB"
   type        = bool
