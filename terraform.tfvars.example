@@ -65,6 +65,14 @@ server_type = "vanilla"
 #   "https://cdn.modrinth.com/data/1bokaNcj/versions/X2u4L3vW/Xaeros_Minimap_24.3.0_Fabric_1.21.jar"
 # ]
 
+# ====================
+# DATAPACKS (works with all server types)
+# ====================
+datapack_urls = [
+  # "https://example.com/datapack1.zip",
+  # "https://example.com/datapack2.zip"
+]
+
 # NLB Protection
 enable_deletion_protection = false # Set to true for production
 

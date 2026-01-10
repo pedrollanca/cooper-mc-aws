@@ -164,6 +164,12 @@ variable "plugin_urls" {
   default     = []
 }
 
+variable "datapack_urls" {
+  description = "List of datapack URLs to download (works with all server types)"
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_deletion_protection" {
   description = "Enable deletion protection for NLB"
   type        = bool

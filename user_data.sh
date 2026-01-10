@@ -111,6 +111,22 @@ else
   fi
 fi
 
+# Download datapacks if specified
+DATAPACK_URLS="${datapack_urls}"
+if [ -n "$DATAPACK_URLS" ]; then
+  # Create world directory if it doesn't exist yet (server will use it)
+  sudo -u minecraft mkdir -p /mnt/minecraft-data/world/datapacks
+
+  IFS=',' read -ra DATAPACKS <<< "$DATAPACK_URLS"
+  for datapack_url in "$${DATAPACKS[@]}"; do
+    if [ -n "$datapack_url" ]; then
+      datapack_filename=$(basename "$datapack_url")
+      echo "Downloading datapack: $datapack_filename"
+      sudo -u minecraft curl -L -o "/mnt/minecraft-data/world/datapacks/$datapack_filename" "$datapack_url"
+    fi
+  done
+fi
+
 # Accept EULA (only if it doesn't exist)
 if [ ! -f /mnt/minecraft-data/eula.txt ]; then
   echo "eula=true" > /mnt/minecraft-data/eula.txt
