@@ -431,6 +431,11 @@ systemctl start minecraft.service
 # Install CloudWatch agent (optional but recommended)
 dnf install -y amazon-cloudwatch-agent
 
+# Install and enable cronie (cron daemon)
+dnf install -y cronie
+systemctl enable crond
+systemctl start crond
+
 # Setup cron job for idle monitoring (runs every 10 minutes)
 cat > /etc/cron.d/minecraft-idle-monitor <<CRONEOF
 */10 * * * * root /usr/local/bin/minecraft-idle-monitor.sh >> /var/log/minecraft-idle-monitor.log 2>&1
