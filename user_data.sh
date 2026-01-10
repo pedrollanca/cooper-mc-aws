@@ -183,14 +183,14 @@ fi
 # Note: Upgrade script removed - use terraform apply with new versions to upgrade
 
 # Create idle monitor script
-cat > /usr/local/bin/minecraft-idle-monitor.sh <<EOF
+cat > /usr/local/bin/minecraft-idle-monitor.sh <<'EOF'
 #!/bin/bash
 # Monitor Minecraft server for idle players and auto-stop after 1 hour
 
 IDLE_FILE="/var/lib/minecraft/idle_since"
-IDLE_THRESHOLD=${idle_timeout_seconds}  # Configurable idle timeout in seconds
-AWS_REGION="${aws_region}"
-SNS_TOPIC_ARN="${sns_topic_arn}"
+IDLE_THRESHOLD=IDLE_TIMEOUT_PLACEHOLDER
+AWS_REGION="AWS_REGION_PLACEHOLDER"
+SNS_TOPIC_ARN="SNS_TOPIC_PLACEHOLDER"
 
 # Function to get player count using RCON
 # Returns: player count (0+), -1 if server is down, -2 if RCON fails
@@ -201,15 +201,27 @@ get_player_count() {
         return
     fi
 
+    # Check if mcrcon is available
+    if ! command -v mcrcon &> /dev/null; then
+        echo "-2"
+        return
+    fi
+
     # Use mcrcon to get player list
     # The "list" command returns something like: "There are 0 of a max of 20 players online:"
-    RCON_OUTPUT=$(mcrcon -H localhost -P 25575 -p "${rcon_password}" "list" 2>/dev/null)
+    RCON_OUTPUT=$(mcrcon -H localhost -P 25575 -p "RCON_PASSWORD_PLACEHOLDER" "list" 2>/dev/null)
 
-    if [ $? -eq 0 ]; then
+    if [ $? -eq 0 ] && [ -n "$RCON_OUTPUT" ]; then
         # Extract player count from output
         # Format: "There are X of a max of Y players online:"
-        PLAYER_COUNT=$(echo "$RCON_OUTPUT" | grep -oP 'There are \K[0-9]+' || echo "0")
-        echo "$PLAYER_COUNT"
+        PLAYER_COUNT=$(echo "$RCON_OUTPUT" | grep -oP 'There are \K[0-9]+' 2>/dev/null)
+
+        # If extraction failed, default to 0
+        if [ -z "$PLAYER_COUNT" ]; then
+            echo "0"
+        else
+            echo "$PLAYER_COUNT"
+        fi
     else
         # RCON connection failed
         echo "-2"
@@ -229,7 +241,15 @@ if [ "$PLAYER_COUNT" = "-1" ] || [ "$PLAYER_COUNT" = "-2" ]; then
     fi
 
     # Read idle start time
-    IDLE_START=$(cat "$IDLE_FILE")
+    IDLE_START=$(cat "$IDLE_FILE" 2>/dev/null)
+
+    # Validate idle start time is a valid number
+    if ! [[ "$IDLE_START" =~ ^[0-9]+$ ]]; then
+        # Invalid timestamp, reset it
+        date +%s > "$IDLE_FILE"
+        exit 0
+    fi
+
     CURRENT_TIME=$(date +%s)
     IDLE_DURATION=$((CURRENT_TIME - IDLE_START))
 
@@ -283,7 +303,15 @@ if [ ! -f "$IDLE_FILE" ]; then
 fi
 
 # Read idle start time
-IDLE_START=$(cat "$IDLE_FILE")
+IDLE_START=$(cat "$IDLE_FILE" 2>/dev/null)
+
+# Validate idle start time is a valid number
+if ! [[ "$IDLE_START" =~ ^[0-9]+$ ]]; then
+    # Invalid timestamp, reset it
+    date +%s > "$IDLE_FILE"
+    exit 0
+fi
+
 CURRENT_TIME=$(date +%s)
 IDLE_DURATION=$((CURRENT_TIME - IDLE_START))
 
@@ -313,6 +341,12 @@ if [ $IDLE_DURATION -ge $IDLE_THRESHOLD ]; then
     rm -f "$IDLE_FILE"
 fi
 EOF
+
+# Replace placeholders with actual values
+sed -i "s/IDLE_TIMEOUT_PLACEHOLDER/${idle_timeout_seconds}/g" /usr/local/bin/minecraft-idle-monitor.sh
+sed -i "s/AWS_REGION_PLACEHOLDER/${aws_region}/g" /usr/local/bin/minecraft-idle-monitor.sh
+sed -i "s|SNS_TOPIC_PLACEHOLDER|${sns_topic_arn}|g" /usr/local/bin/minecraft-idle-monitor.sh
+sed -i "s/RCON_PASSWORD_PLACEHOLDER/${rcon_password}/g" /usr/local/bin/minecraft-idle-monitor.sh
 
 chmod +x /usr/local/bin/minecraft-idle-monitor.sh
 

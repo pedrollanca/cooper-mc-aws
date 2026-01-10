@@ -204,9 +204,10 @@ The server automatically monitors player activity and server health every 10 min
 - Configurable timeout via `idle_timeout_seconds` variable
 
 **How it works:**
-- Cron job checks player count every 10 minutes via RCON
-- Tracks consecutive idle time
+- Cron job runs every 10 minutes to check player count via RCON
+- Tracks consecutive idle time using a timestamp file
 - After threshold exceeded, sends email notification and stops EC2 instance
+- Automatically cleans up stale idle timestamps on every instance boot
 - Different email messages for idle vs. server failure scenarios
 
 **Email notifications:**
@@ -214,7 +215,31 @@ The server automatically monitors player activity and server health every 10 min
 - "Server unreachable - service not running"
 - "Server unreachable - RCON connection failed"
 
-To disable auto-stop, set `idle_timeout_seconds` to a very large number (e.g., 86400 for 24 hours).
+**Testing:**
+To test the auto-stop feature without waiting 1 hour:
+```bash
+# SSH to your server
+ssh -i <your-key>.pem ec2-user@<server-ip>
+
+# Create a fake old timestamp (1 hour + 1 minute ago)
+echo $(($(date +%s) - 3660)) | sudo tee /var/lib/minecraft/idle_since
+
+# Manually run the monitor script
+sudo /usr/local/bin/minecraft-idle-monitor.sh
+
+# The server should stop immediately and send an email
+```
+
+**Adjusting timeout:**
+Set `idle_timeout_seconds` in `terraform.tfvars` (default: 3600 = 1 hour).
+- For testing: `120` (2 minutes)
+- To effectively disable: `86400` (24 hours)
+
+**Restarting after auto-stop:**
+Use your API endpoint to restart:
+```bash
+curl -u username:password https://mc-server.yourdomain.com/start
+```
 
 ### Email Notifications
 
