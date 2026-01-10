@@ -183,7 +183,7 @@ fi
 # Note: Upgrade script removed - use terraform apply with new versions to upgrade
 
 # Create idle monitor script
-cat > /usr/local/bin/minecraft-idle-monitor.sh <<'IDLEOF'
+cat > /usr/local/bin/minecraft-idle-monitor.sh <<EOF
 #!/bin/bash
 # Monitor Minecraft server for idle players and auto-stop after 1 hour
 
@@ -312,7 +312,7 @@ if [ $IDLE_DURATION -ge $IDLE_THRESHOLD ]; then
     # runs on every boot to clear this file and prevent stale timestamps
     rm -f "$IDLE_FILE"
 fi
-IDLEOF
+EOF
 
 chmod +x /usr/local/bin/minecraft-idle-monitor.sh
 
@@ -322,7 +322,7 @@ chown minecraft:minecraft /var/lib/minecraft
 
 # Create a systemd service to clean up stale idle file on every boot
 # This prevents inheriting old timestamps from previous runs if instance was manually stopped/started
-cat > /etc/systemd/system/minecraft-idle-cleanup.service <<'CLEANUPEOF'
+cat > /etc/systemd/system/minecraft-idle-cleanup.service <<EOF
 [Unit]
 Description=Clean up Minecraft idle tracking file on boot
 Before=minecraft.service
@@ -335,12 +335,12 @@ RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
-CLEANUPEOF
+EOF
 
 systemctl enable minecraft-idle-cleanup.service
 
 # Create graceful shutdown script
-cat > /usr/local/bin/minecraft-stop.sh <<'STOPEOF'
+cat > /usr/local/bin/minecraft-stop.sh <<EOF
 #!/bin/bash
 # Gracefully stop Minecraft server to prevent data corruption
 
@@ -365,7 +365,7 @@ if systemctl is-active --quiet minecraft.service; then
 else
     echo "Minecraft server is not running"
 fi
-STOPEOF
+EOF
 
 chmod +x /usr/local/bin/minecraft-stop.sh
 
